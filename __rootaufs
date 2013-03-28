@@ -1,0 +1,218 @@
+# Copyright 2008 Nicholas A. Schembri State College PA USA
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see
+# .
+
+PREREQ=''
+MOUNT=/aufs
+BR_RW=/rw
+BR_RO=/ro
+
+. /conf/arch.conf
+[ "$DPKG_ARCH" == "i386" ] && ARCH="32"
+[ "$DPKG_ARCH" == "amd64" ] && ARCH="64"
+
+
+prereqs() {
+  echo "$PREREQ"
+}
+
+
+modif_hostname() {
+    	nom_machine=$1
+	[ -d "$BR_RW/etc" ] || mkdir $BR_RW/etc
+	cp $BR_RO/etc/hostname $BR_RW/etc/hostname
+	if [ $? -eq 0 ]; then 
+		sed -i 's/patron'$ARCH'/'$nom_machine'/g' /$BR_RW/etc/hostname
+	fi
+}
+
+modif_sudoers() {
+    nom_machine=$1
+    [ -d "$BR_RW/etc" ] || mkdir $BR_RW/etc
+    cp $BR_RO/etc/sudoers $BR_RW/etc/sudoers
+    if [ $? -eq 0 ] ; then 
+    	chmod 640 $BR_RW/etc/sudoers
+    	sed -i 's/patron'$ARCH'/'$nom_machine'/g' $BR_RW/etc/sudoers
+    	chmod 440 $BR_RW/etc/sudoers
+    fi
+}
+
+modif_mail() {
+        nom_machine=$1
+	nom_domain=$2
+	[ -d "$BR_RW/etc/exim4" ] || mkdir -p $BR_RW/etc/exim4
+	cp $BR_RO/etc/mailname $BR_RW/etc/mailname
+	[ $? -eq 0 ] &&  echo "$nom_machine.$nom_domain" > $BR_RW/etc/mailname
+        cp $BR_RO/etc/exim4/update-exim4.conf.conf $BR_RW/etc/exim4/update-exim4.conf.conf
+	[ $? -eq 0 ] && sed -i 's/\(dc_other_hostnames\)=\(.*\)$/\1='"$nom_machine.$nom_domain"'/' $BR_RW/etc/exim4/update-exim4.conf.conf
+}
+
+modif_dhclient() {
+	[ $# -lt 3 ] && exit 0;	
+	nom_machine=$1
+	domain=$2
+	ports_app=$3
+	[ -d "$BR_RW/etc/dhcp" ] || mkdir -p $BR_RW/etc/dhcp
+	cp $BR_RO/etc/dhcp/dhclient.conf $BR_RW/etc/dhcp/dhclient.conf
+	if [ $? -eq 0 ] ; then 
+		sed -i 's/\(send host-name\) \(.*\)/\1 '"\"$nom_machine.$domain\""';/g' $BR_RW/etc/dhcp/dhclient.conf
+		if [ "$ports_app" != "" ]; then
+			sed -i '/send host-name '"\"$nom_machine.$domain\""';/a \send vendor-class-identifier "'$ports_app'";' $BR_RW/etc/dhcp/dhclient.conf
+		fi
+	fi
+}
+
+
+case $1 in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+export aufs
+
+for x in $(cat /proc/cmdline); do
+    case $x in
+        root=*)
+            ROOTNAME=${x#root=}
+            ;;
+        aufs=*)
+            aufs=${x#aufs=}
+#            case $aufs in
+#                tmpfs-debug)
+#                    aufs=tmpfs
+#                    aufsdebug=1
+#                    ;;
+#            esac
+            ;;
+       hostname=*)
+	   hostname=${x#hostname=}
+	   ;;
+       portapps=*)
+	   portapps=${x#portapps=}
+	   ;;
+    esac
+done
+
+if [ ${#aufs} -eq 0 ]; then
+    #not set in boot loader
+    #I'm not loved. good bye
+    exit 0
+fi
+
+modprobe -q --use-blacklist aufs
+if [ $? -ne 0 ]; then
+    echo root-aufs error: Failed to load aufs.ko
+    exit 0
+fi
+
+#make the mount points on the init root file system
+mkdir $MOUNT
+mkdir $BR_RW
+mkdir $BR_RO
+
+# mount the temp file system and move real root out of the way
+tank=$(echo $aufs | awk -F ':' ' { print $1 } ')
+option=$(echo $aufs | awk -F ':' ' { print $2 } ')
+empty=$(echo $aufs | awk -F ':' ' { print $3 } ')
+
+[ ${#option} -eq 0 ] && unset option
+
+if [ "$tank" == "tmpfs" ] ; then
+        mount -t tmpfs -o rw,size=${option:-127m} aufs-tmpfs $BR_RW
+else
+        mount -t ${option:-ext2} $tank $BR_RW
+fi
+if [ $? -ne 0 ]; then
+    echo "Problem to mount $BR_RW check your arguments : $aufs"
+    exit 0
+fi
+
+#mount -t ext3 /dev/xvda2 /rw
+mount --move ${rootmnt} /ro
+if [ $? -ne 0 ]; then
+    echo root-aufs error: ${rootmnt} failed to move to /ro
+    exit 0
+fi
+
+hostn=${hostname%%.*}
+domainn=${hostname#*.}
+#if tank is empty or tmpfs then create files
+if  [ "$empty" == "true" ] || [ "$tank" == "tmpfs" ] ; then
+	modif_hostname $hostn
+	modif_sudoers $hostn
+	modif_mail $hostn $domainn
+	modif_dhclient $hostn $domainn $portapps
+fi
+	
+mount -t aufs -o dirs=/rw:/ro=ro aufs /aufs
+if [ $? -ne 0 ]; then
+echo root-aufs error: Failed to mount /aufs files system
+exit 0
+fi
+
+#test for mount points on aufs file system
+[ -d /aufs/ro ] || mkdir /aufs/ro
+[ -d /aufs/rw ] || mkdir /aufs/rw
+
+# the real root file system is hidden on /ro of the init file system. move it to /ro
+mount --move /ro /aufs/ro
+if [ $? -ne 0 ]; then
+echo root-aufs error: Failed to move /ro /aufs/ro
+exit 0
+fi
+
+# tmpfs file system is hidden on /rw
+mount --move /rw /aufs/rw
+if [ $? -ne 0 ]; then
+echo root-aufs error: Failed to move /rw /aufs/rw
+exit 0
+fi
+
+cat << EOF > /aufs/etc/fstab
+# This fstab is in ram and the real fstab can be found /ro/etc/fstab
+# the root file system ' / ' has been removed.
+# All Swap files have been removed.
+
+EOF
+
+#remove root and swap from fstab
+cat /aufs/ro/etc/fstab| awk '{ if(($2 !="/") && ($3 !="swap"))  print $0 }' >>/aufs/etc/fstab
+if [ $? -ne 0 ]; then
+echo root-aufs error: Failed to create /aufs/etc/fstab
+#exit 0
+fi
+
+# add the read only file system to fstab
+ROOTTYPE=$(cat /proc/mounts|grep ${ROOT}|cut -d' ' -f3)
+ROOTOPTIONS=$(cat /proc/mounts|grep ${ROOT}|cut -d' ' -f4)
+echo ${ROOT} /ro $ROOTTYPE $ROOTOPTIONS 0 0 >>/aufs/etc/fstab
+
+# S22mount on debian systems is not mounting /ro correctly after boot
+# add to rc.local to correct what you see from df
+#replace last case of exit with #exit
+#cat /aufs/ro/etc/rc.local|sed 's/\(.*\)exit/\1\#exit/' >/aufs/etc/rc.local
+#echo mount -f /ro >>/aufs/etc/rc.local
+
+# add back the root file system. mtab seems to be created by one of the init proceses.
+#echo "echo aufs / aufs rw,xino=/rw/.aufs.xino,br:/rw=rw:/ro=ro 0 0 >>/etc/mtab" >>/aufs/etc/rc.local
+#echo "echo aufs-tmpfs /rw tmpfs rw 0 0 >>/etc/mtab" >>/aufs/etc/rc.local
+#echo exit 0 >>/aufs/etc/rc.local
+echo "aufs / aufs rw,xino=/rw/.aufs.xino,br:/rw=rw:/ro=ro 0 0 " >>/aufs/etc/fstab
+#echo "aufs-tmpfs /rw tmpfs rw 0 0" >>/aufs/etc/fstab
+
+mount --move /aufs ${rootmnt}
+exit 0

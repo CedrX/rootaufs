@@ -1,0 +1,12 @@
+kernel='/mnt/oldubuntu/tintanet/debian-kernels/vmlinuz-2.6.32-5-xen-amd64'
+ramdisk='/mnt/oldubuntu/tintanet/debian-kernels/initrd.img-2.6.32-5-xen-aufsv33-amd64'
+#bootloader='/usr/lib/xen-default/bin/pygrub'
+extra="aufs=tmpfs hostname=debessai3.tin.intra.inist.fr portapps=58000:58500:59180"
+memory=256
+name="debessai3"
+vcpus=1
+vif = [ 'mac=00:16:3E:FF:00:21 , bridge=xenbr0' ]
+disk = [ 'file:/home/tintanet/patron64.img,xvda1,r']
+#disk+= [ 'file:/home/tintanet/xvda2-vigi2.img,xvda2,w']
+root="/dev/xvda1"
+#localtime=1

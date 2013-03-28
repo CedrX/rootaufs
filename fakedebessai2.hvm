@@ -1,0 +1,16 @@
+kernel='/mnt/oldubuntu/tintanet/debian-kernels/vmlinuz-2.6.32-5-xen-aufs-686'
+ramdisk='/mnt/oldubuntu/tintanet/debian-kernels/initrd.img-2.6.32-5-xen-aufsv2-686'
+#bootloader='/usr/lib/xen-default/bin/pygrub'
+extra="aufs=/dev/xvda2:ext3"
+memory=256
+name="fakedebessai2"
+vcpus=1
+vif = [ 'mac=00:16:3E:FF:00:18 , bridge=virbr0' ]
+#disk = [ 'snapshot:/home/tintanet/patron32.img:/home/tintanet/patron32-cow.img,xvda1,w']
+disk = [ 'file:/home/tintanet/patron32.img,xvda1,r']
+disk+= [ 'file:/home/tintanet/xvda2-debessai2.img,xvda2,w']
+disk+=  [ 'file:/mnt/oldubuntu/tintanet/tmp2.img,xvdb1,w',
+         'file:/mnt/oldubuntu/tintanet/var2.img,xvdc1,w',
+         'file:/mnt/oldubuntu/tintanet/home2.img,xvdd1,w' ]
+root="/dev/xvda1"
+
