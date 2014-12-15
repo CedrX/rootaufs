@@ -1,13 +1,13 @@
-kernel='/mnt/oldubuntu/tintanet/debian-kernels/vmlinuz-2.6.32-5-xen-amd64'
-ramdisk='/mnt/oldubuntu/tintanet/debian-kernels/initrd.img-2.6.32-5-xen-aufsv33-amd64'
+kernel='/mnt/oldubuntu/tintin/debian-kernels/vmlinuz-2.6.32-5-xen-amd64'
+ramdisk='/mnt/oldubuntu/tintin/debian-kernels/initrd.img-2.6.32-5-xen-aufsv33-amd64'
 #bootloader='/usr/lib/xen-default/bin/pygrub'
-extra="aufs=tmpfs:256m hostname=debessai2.tin.intra.inist.fr portapps=54000:54500:57180"
+extra="aufs=tmpfs:256m hostname=debessai2.tin.intra.domain.fr portapps=54000:54500:57180"
 memory=512
 name="debessai2"
 vcpus=1
 vif = [ 'mac=00:16:3E:FF:00:20 , bridge=xenbr0' ]
-disk = [ 'file:/home/tintanet/patron64.img,xvda1,r']
-#disk+= [ 'file:/home/tintanet/xvda2-vigi2.img,xvda2,w']
-disk+= [ 'file:/home/tintanet/shared.img,xvdb1,w']
+disk = [ 'file:/home/tintin/patron64.img,xvda1,r']
+#disk+= [ 'file:/home/tintin/xvda2-vigi2.img,xvda2,w']
+disk+= [ 'file:/home/tintin/shared.img,xvdb1,w']
 root="/dev/xvda1"
 #localtime=1
